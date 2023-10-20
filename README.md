@@ -1,0 +1,2 @@
+# report
+report是一个用golang实现的数据报表发送程序，通过sql查询数据库并将数据写入excel表格，最终通过邮件发送给用户。
