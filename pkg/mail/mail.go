@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"log"
 	"mime"
@@ -82,7 +83,7 @@ func (sm *SendMail) Auth() {
 	sm.auth = smtp.PlainAuth("", sm.username, sm.password, sm.host)
 }
 
-func (sm SendMail) Send(m *Message) error {
+func (sm *SendMail) Send(m *Message) error {
 	sm.Auth()
 	buffer := bytes.NewBuffer(nil)
 	boundary := "GoBoundary"
@@ -131,10 +132,64 @@ func (sm SendMail) Send(m *Message) error {
 
 	rcpt := strings.Split(recipients, ",")
 
-	if err := smtp.SendMail(sm.host+":"+sm.port, sm.auth, m.from, rcpt, buffer.Bytes()); err != nil {
+	// with starttls
+	// Create a new SMTP client
+	c, err := smtp.Dial(sm.host + ":" + sm.port)
+	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Use StartTLS
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         sm.host,
+	}
+	if err = c.StartTLS(tlsConfig); err != nil {
+		log.Fatal(err)
+	}
+
+	// Authenticate
+	if err = c.Auth(sm.auth); err != nil {
+		log.Fatal(err)
+	}
+
+	// Set the sender and the recipients
+	if err = c.Mail(m.from); err != nil {
+		log.Fatal(err)
+	}
+	for _, addr := range rcpt {
+		if err = c.Rcpt(addr); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Send the email body
+	wc, err := c.Data()
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = buffer.WriteTo(wc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = wc.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Send the QUIT command and close the connection.
+	err = c.Quit()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return nil
+
+	// without starttls
+	//if err := smtp.SendMail(sm.host+":"+sm.port, sm.auth, m.from, rcpt, buffer.Bytes()); err != nil {
+	//	log.Fatal(err)
+	//}
+	//return nil
 }
 
 func writeHeader(buffer *bytes.Buffer, Header map[string]string) string {
