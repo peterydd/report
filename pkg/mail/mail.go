@@ -184,12 +184,6 @@ func (sm *SendMail) Send(m *Message) error {
 	}
 
 	return nil
-
-	// without starttls
-	//if err := smtp.SendMail(sm.host+":"+sm.port, sm.auth, m.from, rcpt, buffer.Bytes()); err != nil {
-	//	log.Fatal(err)
-	//}
-	//return nil
 }
 
 func writeHeader(buffer *bytes.Buffer, Header map[string]string) string {

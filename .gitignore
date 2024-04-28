@@ -28,3 +28,5 @@ data/
 report
 
 
+/configs/config-sample.yaml
+/config.yaml

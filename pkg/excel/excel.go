@@ -70,6 +70,19 @@ func (s *SpreadSheet) Create() error {
 				log.Fatal(err)
 			}
 		}
+
+		// 设置窗格（表头固定,冻结行）
+		if err := f.SetPanes(st.name,
+			&excelize.Panes{
+				Freeze:      true,
+				Split:       false,
+				XSplit:      0,
+				YSplit:      1,
+				TopLeftCell: "A2",
+				ActivePane:  "bottomLeft",
+			}); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// 删除默认sheet1
@@ -80,5 +93,6 @@ func (s *SpreadSheet) Create() error {
 	if err := f.SaveAs(s.name); err != nil {
 		log.Fatal(err)
 	}
+
 	return nil
 }
