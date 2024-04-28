@@ -50,6 +50,11 @@ run-skip-test: build-skip-test
 docker-build: clean
 	$(DOCKER_BUILD_CMD)
 
+.PHONY: docker-scout
+# 扫描 Docker 镜像
+docker-scout: docker-build
+	docker scout quickview
+
 .PHONY: docker-run
 # 运行 Docker 容器
 docker-run:

@@ -158,7 +158,7 @@ spec:
                     path: config.yaml
           containers:
             - name: report
-              image: peterydd/report:v1.0.1
+              image: peterydd/report:v1.0.3
               imagePullPolicy: IfNotPresent
               env:
                 - name: TZ
