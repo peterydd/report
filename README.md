@@ -122,9 +122,13 @@ data:
           - name: "sheet页1"
             sql: "select col1,col2,col3,col4,col5 from table1"
             column: "字段1,字段2,字段3,字段4,字段5"
+            isSum: false
+            sumBeginColumn: 0
           - name: "sheet页2"
             sql: "select col1,col2,col3,col4,col5 from table2"
             column: "字段1,字段2,字段3,字段4,字段5"
+            isSum: true
+            sumBeginColumn: 3
         message:
           from: "test@example.com"
           to: ["test@outlook.com", "test@qq.com"]
