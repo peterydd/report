@@ -36,9 +36,11 @@ type workBook struct {
 
 // sheet 配置
 type sheet struct {
-	Name   string
-	Sql    string
-	Column string
+	Name           string
+	Sql            string
+	Column         string
+	IsSum          bool
+	SumBeginColumn int
 }
 
 // message 配置

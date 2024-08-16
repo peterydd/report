@@ -12,10 +12,12 @@ type conf struct {
 }
 
 type Sheet struct {
-	name   string
-	sql    string
-	column string
-	data   [][]interface{}
+	name           string
+	sql            string
+	column         string
+	isSum          bool
+	sumBeginColumn int
+	data           [][]interface{}
 }
 
 type SpreadSheet struct {
@@ -31,12 +33,14 @@ func NewSpreadSheet(name string, sheets []*Sheet) *SpreadSheet {
 	}
 }
 
-func SetSheet(name, sql, column string, data [][]interface{}) *Sheet {
+func SetSheet(name, sql, column string, isSum bool, sumBeginColumn int, data [][]interface{}) *Sheet {
 	return &Sheet{
-		name:   name,
-		sql:    sql,
-		column: column,
-		data:   data,
+		name:           name,
+		sql:            sql,
+		column:         column,
+		isSum:          isSum,
+		sumBeginColumn: sumBeginColumn,
+		data:           data,
 	}
 }
 
@@ -68,6 +72,53 @@ func (s *SpreadSheet) Create() error {
 			}
 			if err := f.SetSheetRow(st.name, startCell, &row); err != nil {
 				log.Fatal(err)
+			}
+		}
+
+		// 自动求和
+		if st.isSum {
+			columnName, err := excelize.ColumnNumberToName(st.sumBeginColumn - 1)
+			if err != nil {
+				log.Fatal(err)
+			}
+			startCell, err := excelize.JoinCellName("A", len(st.data)+2)
+			if err != nil {
+				log.Fatal(err)
+			}
+			endCell, err := excelize.JoinCellName(columnName, len(st.data)+2)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = f.MergeCell(st.name, startCell, endCell)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = f.SetCellValue(st.name, startCell, "总计")
+			if err != nil {
+				log.Fatal(err)
+			}
+			for i := st.sumBeginColumn; i <= len(columns); i++ {
+				columnName, err = excelize.ColumnNumberToName(i)
+				if err != nil {
+					log.Fatal(err)
+				}
+				sumCell, err := excelize.JoinCellName(columnName, len(st.data)+2)
+				if err != nil {
+					log.Fatal(err)
+				}
+				startCell, err := excelize.JoinCellName(columnName, 2)
+				if err != nil {
+					log.Fatal(err)
+				}
+				endCell, err := excelize.JoinCellName(columnName, len(st.data)+1)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				err = f.SetCellFormula(st.name, sumCell, "SUM("+startCell+":"+endCell+")")
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
 

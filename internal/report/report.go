@@ -41,8 +41,7 @@ func (r *Report) Start() error {
 				return err
 			}
 			log.Println(data)
-			sts = append(sts, excel.SetSheet(st.Name, st.Sql, st.Column, data))
-
+			sts = append(sts, excel.SetSheet(st.Name, st.Sql, st.Column, st.IsSum, st.SumBeginColumn, data))
 		}
 		bookName := rp.WorkBook.Prefix + time.Now().Format(rp.WorkBook.DateFormat) + rp.WorkBook.Suffix
 		sp := excel.NewSpreadSheet(bookName, sts)
