@@ -61,9 +61,13 @@ reports:
       - name: "sheet页1" # sheet页名称
         sql: "select col1,col2,col3,col4,col5 from table1" # sheet页内容查询sql
         column: "字段1,字段2,字段3,字段4,字段5" # sheet页内容字段名称
+        isSum: false # sheet页内容是否需要合计
+        sumBeginColumn: 0 # sheet页内容合计开始列
       - name: "sheet页2" # sheet页名称
         sql: "select col1,col2,col3,col4,col5 from table2" # sheet页内容查询sql
         column: "字段1,字段2,字段3,字段4,字段5" # sheet页内容字段名称
+        isSum: true # sheet页内容是否需要合计
+        sumBeginColumn: 3 # sheet页内容合计开始列
     message:
       from: "test@example.com" # 发件人
       to: ["test@outlook.com", "test@qq.com"] # 收件人列表
@@ -75,7 +79,7 @@ reports:
             测试邮件，请查收附件！
       contentType: "text/plain;charset=utf-8" # 邮件内容类型及字符编码
       attachment:
-        contentType: "text/plain;charset=utf-8" # 福建内容类型及字符编码
+        contentType: "text/plain;charset=utf-8" # 附件内容类型及字符编码
         withFile: true # 是否携带附件
 ```
 
