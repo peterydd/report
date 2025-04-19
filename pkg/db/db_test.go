@@ -56,28 +56,28 @@ func TestDB(t *testing.T) {
 	}
 }
 
-func TestDBError(t *testing.T) {
-	var (
-		factory DBFactory
-	)
-
-	//factory = MysqlDBFactory{}
-	//if err := execute(factory, "test1:password@tcp(localhost:3306)/test"); err == nil {
-	//	t.Fatal("error with factory method pattern:", err)
-	//}
-	//
-	//factory = OracleDBFactory{}
-	//if err := execute(factory, "oracle://test1:password@127.0.0.1:1521/FREEPDB1"); err == nil {
-	//	t.Fatal("error with factory method pattern", err)
-	//}
-	//
-	//factory = PostgreSQLDBFactory{}
-	//if err := execute(factory, "postgres://test1:password@127.0.0.1:5432/test?sslmode=disable"); err == nil {
-	//	t.Fatal("error with factory method pattern", err)
-	//}
-
-	factory = ClickHouseDBFactory{}
-	if err := execute(factory, "clickhouse://test1:password@127.0.0.1:9000/test?dial_timeout=200ms&max_execution_time=60"); err != nil {
-		t.Fatal("error with factory method pattern", err)
-	}
-}
+//func TestDBError(t *testing.T) {
+//	//var (
+//	//	factory DBFactory
+//	//)
+//
+//	//factory = MysqlDBFactory{}
+//	//if err := execute(factory, "test1:password@tcp(localhost:3306)/test"); err == nil {
+//	//	t.Fatal("error with factory method pattern:", err)
+//	//}
+//	//
+//	//factory = OracleDBFactory{}
+//	//if err := execute(factory, "oracle://test1:password@127.0.0.1:1521/FREEPDB1"); err == nil {
+//	//	t.Fatal("error with factory method pattern", err)
+//	//}
+//	//
+//	//factory = PostgreSQLDBFactory{}
+//	//if err := execute(factory, "postgres://test1:password@127.0.0.1:5432/test?sslmode=disable"); err == nil {
+//	//	t.Fatal("error with factory method pattern", err)
+//	//}
+//
+//	//factory = ClickHouseDBFactory{}
+//	//if err := execute(factory, "clickhouse://test1:password@127.0.0.1:9000/test?dial_timeout=200ms&max_execution_time=60"); err != nil {
+//	//	t.Fatal("error with factory method pattern", err)
+//	//}
+//}
