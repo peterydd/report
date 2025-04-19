@@ -52,6 +52,8 @@ func NewDBFactory(t DBType) DBFactory {
 		return &MysqlDBFactory{}
 	case POSTGRESSQL:
 		return &PostgreSQLDBFactory{}
+	case CLICKHOUSE:
+		return &ClickHouseDBFactory{}
 	default:
 		return nil
 	}
