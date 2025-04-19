@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	_ "github.com/ClickHouse/clickhouse-go/v2"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/sijms/go-ora/v2"
@@ -38,6 +39,8 @@ const (
 	MYSQL
 	// POSTGRESSQL 是 Postgressql 类型
 	POSTGRESSQL
+	// CLICKHOUSE 是 Clickhouse 类型
+	CLICKHOUSE
 )
 
 // NewDBFactory 是工厂方法
@@ -203,5 +206,36 @@ func (p *PostgreSQLDB) Connect(dataSourceName string) error {
 	p.conn.SetConnMaxLifetime(time.Minute * 3)
 	p.conn.SetMaxOpenConns(25)
 	p.conn.SetMaxIdleConns(5)
+	return nil
+}
+
+// ClickHouseDB
+type ClickHouseDB struct {
+	*DBBase
+}
+
+// ClickHouseDBFactory 是 ClickHouseDB 的工厂类
+type ClickHouseDBFactory struct{}
+
+func (ClickHouseDBFactory) Create() DB {
+	return &ClickHouseDB{
+		DBBase: &DBBase{},
+	}
+}
+
+// ClickHouseDB Connect方法具体实现
+func (c *ClickHouseDB) Connect(dataSourceName string) error {
+	var err error
+	c.conn, err = sql.Open("clickhouse", dataSourceName)
+	if err != nil {
+		return err
+	}
+	if err := c.conn.Ping(); err != nil {
+		return err
+	}
+	// 连接池配置示例
+	c.conn.SetConnMaxLifetime(time.Minute * 3)
+	c.conn.SetMaxOpenConns(25)
+	c.conn.SetMaxIdleConns(5)
 	return nil
 }
