@@ -1,31 +1,70 @@
-﻿# 杩愮淮鎸囧崡
+# 运维指南
 
-> 閫傜敤鐗堟湰锛歷1.0.x  
-> 闈㈠悜锛歋RE銆佽繍缁淬€佸€肩彮宸ョ▼甯?
-## 1. 閮ㄧ讲褰㈡€?
-| 褰㈡€?| 鍦烘櫙 | 鍏抽敭鐐?|
-|------|------|--------|
-| 瑁告満 / VM `systemd` | 鑷缓鏈烘埧 | 鍗曚竴 cron 浠诲姟 |
-| Docker | 娴嬭瘯銆佸皬瑙勬ā | 鎸傝浇 `config.yaml` |
-| Kubernetes CronJob | 浜戝師鐢?| 鎺ㄨ崘鐢熶骇 |
+> 适用版本：v1.1.0  
+> 面向：SRE、运维、值班工程师  
+> 部署相关的快速索引见 [deploy/README.md](../deploy/README.md)。
 
-## 2. 浜岃繘鍒堕儴缃?
-### 2.1 鏋勫缓
+## 目录
+
+1. 部署形态
+2. 本地二进制部署
+3. Docker 部署
+4. Kubernetes 部署
+5. 配置管理
+6. 监控与日志
+7. 备份与恢复
+8. 故障排查
+9. 升级与回滚
+10. 安全合规
+
+---
+
+## 1. 部署形态
+
+| 形态 | 适用场景 | 调度方式 | 文档 |
+|---|---|---|---|
+| 本地二进制 | 调试 / 一次性任务 | 手动 / cron | [§2](#2-本地二进制部署) |
+| Docker | 单机 / 边缘节点 | 宿主机 cron / systemd timer | [§3](#3-docker-部署) |
+| Kubernetes | 集群 / 多节点 / 高可用 | Kubernetes CronJob | [§4](#4-kubernetes-部署) |
+
+不论哪种形态，业务流程一致：
+
+```
+加载 config.yaml (可被 REPORT_* 环境变量覆盖)
+    ↓
+连接数据库 → 池化（MaxOpenConns / MaxIdleConns / ConnMaxLifetime）
+    ↓
+并发查询各 sheet（maxConcurrentSheets=8 信号量）
+    ↓
+生成 .xlsx（excleize 流式写）
+    ↓
+SMTP 发送（含 attachment、CC、BCC）
+    ↓
+退出码 0
+```
+
+---
+
+## 2. 本地二进制部署
+
+### 2.1 构建
 
 ```bash
 make build VERSION=v1.1.0
-# 浜х墿: ./report (Linux/macOS) 鎴?report.exe (Windows)
+# 产物：./report (Linux/macOS) 或 report.exe (Windows)
 ```
 
-### 2.2 鐩綍缁撴瀯锛堝缓璁級
+### 2.2 目录结构（建议）
 
 ```
 /opt/report/
-鈹溾攢鈹€ bin/report                 # 鍙墽琛?鈹溾攢鈹€ config/config.yaml         # 閰嶇疆锛堥檺 600 鏉冮檺锛?鈹溾攢鈹€ output/                    # xlsx 杈撳嚭锛堝彲閫夛級
-鈹斺攢鈹€ logs/                      # 鏃ュ織锛堝彲閫夛級
+├── bin/report                 # 可执行
+├── config/config.yaml         # 配置（限 600 权限）
+├── output/                    # xlsx 输出（可选）
+└── logs/                      # 日志（可选）
 ```
 
-### 2.3 systemd 鍗曞厓
+### 2.3 systemd 单元
 
 ```ini
 # /etc/systemd/system/report@daily.service
@@ -39,259 +78,335 @@ User=report
 WorkingDirectory=/opt/report
 ExecStart=/opt/report/bin/report
 EnvironmentFile=/opt/report/config/report.env
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:/var/log/report/report.log
+StandardError=append:/var/log/report/report.err
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-### 2.4 瀹氭椂
+```ini
+# /etc/systemd/system/report@daily.timer
+[Unit]
+Description=Run report daily
 
-```bash
-# /etc/cron.d/report
-# m h dom mon dow user  command
-0 9 * * *  report  systemctl start report@daily.service
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
 ```
 
-## 3. Docker 閮ㄧ讲
-
-### 3.1 鏋勫缓
-
 ```bash
-make docker-build
-# 鎴栧甫鐗堟湰锛歮ake docker-build VERSION=v1.1.0
+systemctl daemon-reload
+systemctl enable --now report@daily.timer
 ```
 
-### 3.2 杩愯
+---
+
+## 3. Docker 部署
+
+### 3.1 准备
 
 ```bash
-docker run -d \
-  --name report \
-  --restart on-failure:3 \
-  -v /opt/report/config.yaml:/config.yaml:ro \
-  peterydd/report:latest
+cd deploy/docker
+cp .env.example .env
+# 编辑 .env：SMTP_HOST / SMTP_PASSWORD / DB_SOURCE 等
 ```
 
-### 3.3 璋冭瘯
+`.env` 含敏感信息，**不要**提交仓库（已在 `.gitignore` 忽略）。
+
+### 3.2 运行
 
 ```bash
-docker logs -f report
-docker exec -it report /bin/sh
+# 一次性运行
+docker compose run --rm report
+
+# 后台启动（调试用；生产推荐 host cron 触发）
+docker compose up
+
+# 查看产物（xlsx 默认落到 report-output 卷）
+docker compose run --rm report
+ls -la /var/lib/docker/volumes/report-output/_data/
 ```
 
-## 4. Kubernetes CronJob
+### 3.3 定时调度
 
-### 4.1 瀹屾暣绀轰緥
+compose 本身不调度。建议用 **systemd timer** 触发（见 §2.3，命令改为
+`/usr/bin/docker compose run --rm report`），或传统 crontab：
+
+```cron
+0 8 * * * cd /opt/report/deploy/docker && /usr/bin/docker compose run --rm report >> /var/log/report.log 2>&1
+```
+
+### 3.4 镜像版本升级
+
+```bash
+docker compose pull
+docker compose run --rm report
+```
+
+---
+
+## 4. Kubernetes 部署
+
+### 4.1 一次性应用
+
+```bash
+# 编辑 30-secret.yaml：REPORT_SMTP_PASSWORD
+# 编辑 20-configmap.yaml：SQL / 收件人
+kubectl apply -k deploy/k8s
+```
+
+### 4.2 自定义镜像
+
+```bash
+docker build -f deploy/docker/Dockerfile.production \
+  -t registry.example.com/report:1.1.0 .
+docker push registry.example.com/report:1.1.0
+```
+
+修改 `50-cronjob.yaml` 的 `image:` 字段，或用 kustomize patch：
 
 ```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: report-config
-data:
-  config.yaml: |
-    database:
-      driver: mysql
-      source: "user:pass@tcp(mysql:3306)/db"
-    smtp:
-      host: smtp.example.com
-      port: "587"
-      username: report@example.com
-      password: REPLACE_ME   # 瀹為檯浠?Secret 娉ㄥ叆
-    reports:
-      - { ... }
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: report-secret
-type: Opaque
-stringData:
-  smtp-password: your-password
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: daily-report
-spec:
-  schedule: "0 9 * * *"
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
-  startingDeadlineSeconds: 600
-  jobTemplate:
-    spec:
-      backoffLimit: 2
-      template:
-        metadata:
-          labels: { app: report }
-        spec:
-          restartPolicy: OnFailure
-          containers:
-            - name: report
-              image: peterydd/report:v1.1.0
-              imagePullPolicy: IfNotPresent
-              env:
-                - name: CONFIG_PATH
-                  value: /etc/report
-              volumeMounts:
-                - name: cfg
-                  mountPath: /etc/report
-                  readOnly: true
-                - name: out
-                  mountPath: /tmp
-              resources:
-                requests: { cpu: 250m, memory: 256Mi }
-                limits:   { cpu: 1000m, memory: 2Gi }
-              securityContext:
-                runAsNonRoot: true
-                runAsUser: 65532
-                allowPrivilegeEscalation: false
-                capabilities: { drop: [ALL] }
-                readOnlyRootFilesystem: true
-          volumes:
-            - name: cfg
-              configMap: { name: report-config }
-            - name: out
-              emptyDir: {}
+images:
+  - name: report
+    newName: registry.example.com/report
+    newTag: 1.1.0
 ```
 
-### 4.2 鍏抽敭鐐?
-- `concurrencyPolicy: Forbid` 闃叉涓婃鏈畬鎴愭椂鏂颁竴娆″惎鍔?- `backoffLimit: 2` 澶辫触鍚庨噸璇?2 娆?- `securityContext` 浠ラ潪 root 鐢ㄦ埛杩愯銆佸彧璇绘牴鏂囦欢绯荤粺
-- 閰嶇疆鏂囦欢鐢?ConfigMap锛涙晱鎰熷瓧娈电敤 Secret锛堟洿浣冲疄璺垫槸鐢?`external-secrets-operator`锛?
-## 5. 鏃ュ織
+### 4.3 触发时间
 
-### 5.1 杈撳嚭
+编辑 `50-cronjob.yaml`：
+- `spec.schedule`：标准 cron 表达式（5 字段）
+- `spec.timeZone`：IANA 时区名（k8s ≥ 1.27 支持）
 
-宸ュ叿浣跨敤 Go 鏍囧噯 `log` 鍖咃紝杈撳嚭鍒?**stderr**銆?
-鏍蜂緥锛?
-```
-2024/05/01 09:00:00 configuration loaded successfully
-2024/05/01 09:00:00 sheet 璁㈠崟鏄庣粏 using streaming mode, batch size: 20000
-2024/05/01 09:00:01 sheet 璁㈠崟鏄庣粏 streaming query completed, 12345 rows processed
-2024/05/01 09:00:02 report 閿€鍞姤琛╛20240501_090002.xlsx generated successfully
-2024/05/01 09:00:03 email 姣忔棩閿€鍞姤琛?sent successfully
-```
-
-### 5.2 鍏抽敭浜嬩欢娓呭崟
-
-| 鍏抽敭璇?| 鍚箟 |
-|--------|------|
-| `configuration loaded` | 鍚姩鎴愬姛 |
-| `using streaming mode` | sheet 璧版祦寮?|
-| `query completed` | 鍗?sheet 瀹屾垚 |
-| `generated successfully` | xlsx 钀界洏 |
-| `sent successfully` | 閭欢宸插彂鍑?|
-| `failed:` | 澶辫触锛堝繀鏈夊師鍥狅級 |
-
-### 5.3 闆嗕腑鏃ュ織
-
-鐢熶骇寤鸿锛?
-- **Loki / ELK**锛氱敤 vector / fluentbit 閲囬泦 stderr
-- **JSON 杈撳嚭**锛坴1.1锛夛細鏇挎崲 `log` 涓?`zap` / `zerolog`
-- **PII 鑴辨晱**锛氫笉瑕佸湪鏃ュ織涓緭鍑哄瘑鐮?/ DSN
-
-### 5.4 鏃ュ織杞浆
-
-- systemd journal锛氳嚜鍔?- Docker锛歚--log-opt max-size=10m --log-opt max-file=3`
-- 瑁告満锛歭ogrotate
-
-## 6. 鐩戞帶
-
-### 6.1 鍋ュ悍妫€鏌?
-CronJob 妯″紡娌℃湁甯搁┗杩涚▼锛岀洃鎺у簲鑱氱劍 **Job 瀹屾垚鐘舵€?*锛?
-```yaml
-# PrometheusRule 绀轰緥
-- alert: ReportJobFailed
-  expr: kube_job_status_failed{job_name=~"daily-report-.*"} > 0
-  for: 1m
-  annotations:
-    summary: "Report Job 澶辫触"
-```
-
-### 6.2 鑷畾涔夋寚鏍囷紙v1.2 璁″垝锛?
-v1.2 灏嗗鍑?Prometheus 鎸囨爣锛?
-- `report_query_duration_seconds{report, sheet}`
-- `report_excel_size_bytes{report}`
-- `report_email_send_total{status}`
-- `report_active_sheet_goroutines`
-
-### 6.3 涓氬姟鐩戞帶
-
-- 鏀朵欢浜烘敹鍒伴偖浠?鈫?閫氳繃 SMTP 鎶曢€掓棩蹇楋紙澶栭儴锛?- xlsx 鏂囦欢澶у皬 鈫?寮傚父灏忥紙濡?< 1KB锛夊彲鑳芥槸绌烘煡璇?
-## 7. 澶囦唤涓庢仮澶?
-### 7.1 澶囦唤
-
-- 閰嶇疆鏂囦欢锛氱敤 Git 绠＄悊
-- 鐢熸垚鐨?xlsx锛氬彲閫夋寔涔呭嵎 / 瀵硅薄瀛樺偍
-
-### 7.2 鎭㈠
-
-- 閲嶆柊閮ㄧ讲 CronJob 鍗冲彲锛屽伐鍏锋棤鐘舵€?
-## 8. 鍗囩骇
+### 4.4 手动触发 / 调试
 
 ```bash
-# 1. 鎷夊彇鏂扮増鏈?git pull
-make build VERSION=v1.1.0
+# 立即跑一次
+kubectl create job -n report --from=cronjob/report report-manual-1
 
-# 2. 鐏板害涓€鍙版満鍣?systemctl start report@daily.service  # 瑙傚療鏃ュ織
+# 查看日志
+kubectl logs -n report -l app.kubernetes.io/component=runner --tail=200
 
-# 3. 鎺ㄩ€侀暅鍍忥紙K8s 妯″紡锛?docker push peterydd/report:v1.1.0
-kubectl set image cronjob/daily-report report=peterydd/report:v1.1.0
+# 进入 Pod 调试（不推荐，会修改只读根文件系统）
+kubectl debug -n report -it --image=busybox:1.36 --target=report
 ```
 
-璇︾粏杩佺Щ娉ㄦ剰浜嬮」瑙?[docs/migration.md](migration.md)銆?
-## 9. 鏁呴殰鎺掓煡
+### 4.5 资源调优
 
-### 9.1 Job 涓€鐩?Pending
+`50-cronjob.yaml` 默认：
+- requests：`100m CPU / 128Mi RAM`
+- limits：`1 CPU / 512Mi RAM`
 
-- 妫€鏌?imagePullSecrets
-- 妫€鏌?nodeSelector / tolerations
-- 妫€鏌ヨ祫婧愰厤棰?
-### 9.2 Job Failed
+大报表（百万行）建议把内存 limit 提到 `2Gi`；Excel 流式写入
+内存峰值 ≈ 50MB / sheet。`activeDeadlineSeconds: 1800` 防止卡死。
+
+### 4.6 升级与回滚
 
 ```bash
-kubectl describe job <name>
-kubectl logs <pod>
+# 升级镜像版本
+kubectl set image -n report cronjob/report report=registry.example.com/report:1.1.1
+
+# 暂停调度
+kubectl patch -n report cronjob/report -p '{"spec":{"suspend":true}}'
 ```
 
-甯歌鍘熷洜锛?- `failed to read configuration file` 鈫?ConfigMap 鏈寕杞芥垨璺緞閿?- `unsupported database driver` 鈫?`driver` 鍊奸敊
-- DB 杩炴帴瓒呮椂 鈫?闃茬伀澧?/ DSN
-- SMTP 璁よ瘉澶辫触 鈫?瀵嗙爜閿欒
+---
 
-### 9.3 閭欢鏈敹鍒?
-1. 鏌ョ湅 Job 鏃ュ織涓?`email ... sent successfully`
-2. 鏀朵欢浜烘煡鍨冨溇閭欢
-3. SMTP 鏈嶅姟鍣ㄦ姇閫掓棩蹇楋紙Postfix锛歚/var/log/maillog`锛?4. SPF / DKIM 閰嶇疆
+## 5. 配置管理
 
-### 9.4 鎶ヨ〃涓虹┖浣嗘棤閿欒
+### 5.1 覆盖优先级
 
-- SQL 鏈韩鏃犵粨鏋?- Sheet 鍚嶅寘鍚壒娈婂瓧绗﹁鏇挎崲
-- 鍐欏叆鏃舵病璁?`column`锛屽垪鏁板涓嶄笂
+v1.1.0+ 起优先级：
 
-### 9.5 OOM Killed
+```
+默认值  <  config.yaml  <  REPORT_* 环境变量
+```
 
-- 澶ф暟鎹噺鏈惎鐢?stream
-- 鍑忓皬 `batchSize`
-- 鎻愰珮鍐呭瓨 limit
+完整 env 变量列表见 `pkg/config/config.go:bindEnvOverrides`。
+生产推荐：
 
-### 9.6 鏁版嵁绔炰簤
+| 字段 | 走 yaml | 走 env | 走 Secret |
+|---|---|---|---|
+| `smtp.host` | ✅ | 可 | — |
+| `smtp.port` | ✅ | 可 | — |
+| `smtp.username` | ✅ | 可 | — |
+| **`smtp.password`** | ❌ | — | ✅ 必走 |
+| **`database.source`**（含密码） | ❌ | — | ✅ 必走 |
+| SQL / 收件人 | ✅ | ❌ | ❌ |
 
-- `go test -race ./...` 澶嶇幇
-- 鍏变韩鍙橀噺鏈姞閿?
-## 10. 瀹归噺瑙勫垝
+### 5.2 配置校验
 
-| 鎶ヨ〃瑙勬ā | CPU | 鍐呭瓨 | 纾佺洏 | 缃戠粶 |
-|----------|-----|------|------|------|
-| 灏忥紙< 1 涓囪锛?| 250m | 256Mi | 100MB锛堝惈 xlsx锛?| 浣?|
-| 涓紙10 涓囪锛?| 500m | 512Mi | 200MB | 涓?|
-| 澶э紙鐧句竾琛岋級 | 1000m | 2Gi | 1GB+ | 楂橈紙DB鈫扐pp鈫扴MTP锛?|
+启动时 `Config.Validate()` 严格检查：
+- `database.{driver,source}` 必填
+- `smtp.{host,port,username,password}` 必填
+- 至少一个 report，且包含 sheets + message
 
-> 閭欢闄勪欢 > 20MB 寤鸿鏀圭敤瀵硅薄瀛樺偍 + 閾炬帴銆?
-## 11. 鍏宠仈閾炬帴
+校验失败进程退出码非 0，stderr 输出原因。
 
-- [閰嶇疆鍙傝€僝(configuration.md)
-- [瀹夊叏瀹炶返](security.md)
-- [寮€鍙戞寚鍗梋(development.md)
-- [鏋舵瀯鏂囨。](architecture.md)
+### 5.3 配置热重载
+
+`pkg/config` 监听 `config.yaml` 文件变更，校验通过后自动重新加载。
+热重载只覆盖内存中的 `*Config`，不会重启进程。
+
+---
+
+## 6. 监控与日志
+
+### 6.1 日志
+
+所有日志走 Go 标准 `log` 包，**输出到 stderr**：
+
+```
+2026/06/15 10:24:15 sheet Orders using streaming mode, batch size: 100
+2026/06/15 10:24:15 sheet Orders streaming query completed, 1234 rows processed
+2026/06/15 10:24:16 report rpt_20260615.xlsx generated successfully
+2026/06/15 10:24:16 email Daily Report sent successfully
+```
+
+关键事件：
+- `configuration loaded successfully` — 启动 OK
+- `sheet %s query completed` / `streaming query completed` — 单 sheet 完成
+- `report %s generated successfully` — Excel OK
+- `email %s sent successfully` — 邮件 OK
+- `panic: ...` — sheet goroutine panic（v1.1.0 会被 recover，不再致命）
+- `report %s skipped: ...` — 整报表跳过
+
+### 6.2 退出码
+
+| 码 | 含义 |
+|---|---|
+| 0 | 全部成功 |
+| 1 | 配置加载 / 校验失败 |
+| 1 | DB 连接失败 |
+| 1 | 致命 panic 未恢复 |
+
+> 注：单 sheet 失败 / 单邮件失败 / 部分报表失败 → Run() 继续后续，**进程仍退出 0**。
+> 这是设计：一次失败不应让整个计划崩溃。监控告警应基于「期望邮件数 vs 实际邮件数」而非退出码。
+
+### 6.3 建议接入的指标
+
+- `report_run_total{result="success|fail"}`（自定义埋点）
+- `report_email_sent_total{to=*,report=*}`
+- `report_duration_seconds{report=*}`
+- Kubernetes：`CronJob.status.active` / `.lastSuccessfulTime` / `.lastFailedTime`
+
+v1.2 计划引入 Prometheus exporter（[ROADMAP § v1.2](../ROADMAP.md)）。
+
+---
+
+## 7. 备份与恢复
+
+### 7.1 配置
+
+```bash
+# config.yaml 必须纳入配置管理（etcd / Vault / Git）
+cp /opt/report/config/config.yaml backup/config-$(date +%Y%m%d).yaml
+chmod 600 backup/config-*.yaml
+```
+
+### 7.2 输出（生成的 xlsx）
+
+- 单机：默认落到 `/var/reports`（k8s 通过 PVC 持久化）
+- 建议推送到 OSS / S3 / 备份存储，保留 N 天
+
+```bash
+# 简易同步（单机）
+rsync -av /opt/report/output/ backup@backup-host:/srv/report/$(date +%Y%m)/
+```
+
+### 7.3 数据库
+
+report CLI 是**只读**消费者，但请确保：
+- DB 账号只授予 `SELECT` 权限（最小权限）
+- 启用 DB 自带的备份策略（MySQL binlog / PostgreSQL WAL）
+
+---
+
+## 8. 故障排查
+
+| 现象 | 排查步骤 |
+|---|---|
+| 进程立即退出，无日志 | 检查 `config.yaml` 是否存在且格式正确；设 `REPORT_*` env 覆盖验证 |
+| `failed to load configuration` | 路径？权限？`Config.Validate` 错误信息 |
+| `dial tcp ...: connect: connection refused` | DB host/port 可达？防火墙？VPN？ |
+| `SMTP authentication failed` | 密码对？应用专用密码（不是登录密码）？ |
+| 邮件进了垃圾箱 | SPF / DKIM / DMARC 配置；From 地址与 smtp 用户名一致？ |
+| 部分 sheet 失败 | 日志看 `sheet %s query failed`；先用 `mysql` 客户端跑相同 SQL |
+| 整报表跳过 | 全部 sheet 失败才触发；查 sheet 级日志 |
+| CronJob 一直 Pending | PVC 绑定？StorageClass 名称？ |
+| CronJob ContainerCreating | 镜像能 pull？Secret / ConfigMap 存在？ |
+| 时区不对 | CronJob `timeZone` + ConfigMap `dateFormat` 一致？ |
+| Goroutine panic | v1.1.0 已自动 recover，进程继续；查 `panicked:` 日志 |
+
+### 调试工具
+
+```bash
+# 启用 trace 日志（v1.2+）
+REPORT_LOG_LEVEL=debug ./report
+
+# 模拟 SMTP（不真发）
+docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+
+# 验证 config 加载
+./report --config-check
+```
+
+---
+
+## 9. 升级与回滚
+
+### 9.1 升级路径
+
+| 从 | 到 | 文档 |
+|---|---|---|
+| v1.0.x | v1.1.0 | [docs/migration.md § 从-v106-升级到-v110](migration.md) |
+| v1.0.0 | v1.0.1 | [docs/migration.md § 从-v100-升级到-v101](migration.md) |
+
+升级前：
+1. 读 [CHANGELOG.md](../CHANGELOG.md)
+2. 在测试环境跑 `make test`
+3. 灰度一台机器或一个 CronJob
+4. 24 小时观察后全量推送
+
+### 9.2 回滚
+
+```bash
+# K8s：改镜像 tag 到上一个版本
+kubectl set image -n report cronjob/report report=registry.example.com/report:1.0.6
+
+# Docker compose
+docker compose down
+docker compose run --rm report   # 用旧镜像需先 docker tag
+
+# 本地
+git checkout v1.0.6
+make build VERSION=v1.0.6
+```
+
+镜像 tag 永久保留（语义化版本承诺），旧版本随时可拉。
+
+---
+
+## 10. 安全合规
+
+- **配置含敏感字段**（SMTP 密码 / DB DSN）→ 走 env / Secret，**绝不**入 git
+- **镜像 tag 锁定**具体版本（不要用 `:latest`）
+- **Pod Security**：`runAsNonRoot: true` + `readOnlyRootFilesystem: true`
+- **网络**：SMTP 必须走 TLS 1.2+（v1.1.0 强制）
+- **审计日志**：v1.2 计划引入 JSON 行审计
+
+完整安全清单见 [docs/security.md](security.md) + [deploy/README.md § 4](../deploy/README.md)。
+
+---
+
+## 关联
+
+- [deploy/README.md](../deploy/README.md) — 部署快速索引
+- [docs/configuration.md](configuration.md) — 完整配置参考
+- [docs/security.md](security.md) — 安全实践
+- [docs/migration.md](migration.md) — 升级指南
+- [CHANGELOG.md](../CHANGELOG.md) — 版本变更
