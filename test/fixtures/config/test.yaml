@@ -1,0 +1,36 @@
+database:
+  driver: "mysql"
+  source: "test:test@tcp(localhost:3306)/testdb"
+  maxOpenConns: 5
+  maxIdleConns: 2
+  connMaxLifetime: "1m"
+
+smtp:
+  host: "smtp.test.com"
+  port: "587"
+  username: "test@test.com"
+  password: "test-password"
+  insecureSkipVerify: true
+  timeout: "10s"
+
+reports:
+  - name: "Test Report"
+    workBook:
+      prefix: "test_"
+      dateFormat: "20060102"
+      suffix: ".xlsx"
+    sheets:
+      - name: "Test Sheet"
+        sql: "SELECT id, name, value FROM test_table LIMIT 10"
+        column: "ID,Name,Value"
+        isSum: false
+        enableStream: false
+        batchSize: 100
+    message:
+      from: "test@test.com"
+      to: ["recipient@test.com"]
+      subject: "Test Subject"
+      body: "Test Body"
+      contentType: "text/plain"
+      attachment:
+        withFile: true

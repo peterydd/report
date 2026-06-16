@@ -1,11 +1,19 @@
 database:
-  driver: 0 # 0: oracle 1: mysql 2: postgressql
+  driver: "oracle"           # 支持: "oracle", "mysql", "postgresql", "clickhouse"
   source: "oracle://test:password@127.0.0.1:1521/FREEPDB1"
+  maxOpenConns: 25           # 最大打开连接数
+  maxIdleConns: 5            # 最大空闲连接数
+  connMaxLifetime: "3m"      # 连接最大生命周期
 smtp:
   host: "smtp.example.com"
   port: "25"
   username: "test@example.com"
-  password: "password"
+  password: "password"       # 推荐改用 REPORT_SMTP_PASSWORD 环境变量，避免明文落盘
+  insecureSkipVerify: false  # 是否跳过TLS证书验证，生产环境建议设为false
+  timeout: "30s"             # SMTP操作超时时间
+# 所有字段都可以通过 REPORT_<PATH> 形式的环境变量覆盖（点号转下划线）
+# All fields can be overridden by REPORT_<PATH> env vars (dots become underscores)
+# 例如: REPORT_SMTP_PASSWORD=xxx REPORT_SMTP_HOST=smtp.real.com
 reports:
   - name: "报表名称"
     workBook:
@@ -18,11 +26,15 @@ reports:
         column: "字段1,字段2,字段3,字段4,字段5"
         isSum: false
         sumBeginColumn: 0
+        enableStream: false     # 是否启用流式查询（大数据量时建议开启）
+        batchSize: 10000        # 流式查询批次大小（默认10000）
       - name: "sheet页2"
         sql: "select col1,col2,col3,col4,col5 from table2"
         column: "字段1,字段2,字段3,字段4,字段5"
         isSum: true
         sumBeginColumn: 3
+        enableStream: true      # 启用流式查询处理大数据量
+        batchSize: 50000        # 大数据量时可增大批次
     message:
       from: "test@example.com"
       to: ["test@outlook.com", "test@qq.com"]
@@ -34,5 +46,5 @@ reports:
             测试邮件，请查收附件
       contentType: "text/plain;charset=utf-8"
       attachment:
-        contentType: "text/plain;charset=utf-8"
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         withFile: true

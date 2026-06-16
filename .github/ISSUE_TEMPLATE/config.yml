@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 问题讨论
+    url: https://github.com/peterydd/report/discussions
+    about: 请在这里讨论使用问题和想法
+  - name: 查看文档
+    url: https://github.com/peterydd/report#readme
+    about: 查看 README 文档获取使用说明

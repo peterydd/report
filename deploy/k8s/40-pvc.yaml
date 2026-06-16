@@ -1,0 +1,21 @@
+# =====================================================================
+# Persistent volume for generated .xlsx reports (audit trail).
+# 报表输出持久卷，便于审计。
+# In production, replace with a StorageClass-bound PVC matching your
+# storage provider (e.g. ebs-sc, nfs-sc, ceph-rbd).
+# =====================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: report-output
+  namespace: report
+  labels:
+    app.kubernetes.io/name: report
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard    # uncomment + set per cluster

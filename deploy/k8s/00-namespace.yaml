@@ -1,0 +1,14 @@
+# =====================================================================
+# Dedicated namespace for the report CLI.
+# 给 report CLI 的专用命名空间，便于配额管理与 RBAC 隔离。
+# =====================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: report
+  labels:
+    app.kubernetes.io/name: report
+    app.kubernetes.io/part-of: report
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

@@ -1,0 +1,77 @@
+# =====================================================================
+# Production docker-compose stack.
+# 生产环境 docker-compose 部署栈。
+#
+# Usage / 用法:
+#   1. cp .env.example .env  &&  fill in real values
+#   2. docker compose pull            # pull base images
+#   3. docker compose up -d           # one-shot run (CronJob model)
+#
+# The report service is a one-shot CLI: docker compose runs it once and
+# exits with code 0. To schedule recurring runs, pair this stack with
+# a host cron entry:
+#   0 8 * * *  cd /opt/report && docker compose up report
+# Or run it under Kubernetes (see deploy/k8s).
+# =====================================================================
+
+name: report
+
+services:
+  report:
+    image: report:1.1.0
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.production
+    container_name: report
+    # One-shot mode: run once, exit. Use a process manager or host cron
+    # to trigger recurring runs.
+    restart: "no"
+    user: "65532:65532"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+    volumes:
+      # Configs (read-only). The /app/configs path matches viper's
+      # search list (it includes /).
+      - ../../configs:/app/configs:ro
+      # Generated workbooks + attachment temp. Persist for audit.
+      - report-output:/var/reports
+    environment:
+      # All non-secret values come from the local .env file so they
+      # never live inside the image.
+      REPORT_SMTP_HOST: ${SMTP_HOST}
+      REPORT_SMTP_PORT: ${SMTP_PORT:-587}
+      REPORT_SMTP_USERNAME: ${SMTP_USERNAME}
+      REPORT_SMTP_PASSWORD: ${SMTP_PASSWORD}
+      REPORT_SMTP_INSECURESKIPVERIFY: ${SMTP_INSECURESKIPVERIFY:-false}
+      REPORT_SMTP_TIMEOUT: ${SMTP_TIMEOUT:-30s}
+      REPORT_DATABASE_DRIVER: ${DB_DRIVER}
+      REPORT_DATABASE_SOURCE: ${DB_SOURCE}
+      REPORT_DATABASE_MAXOPENCONNS: ${DB_MAXOPENCONNS:-10}
+      REPORT_DATABASE_MAXIDLECONNS: ${DB_MAXIDLECONNS:-5}
+      REPORT_DATABASE_CONNMAXLIFETIME: ${DB_CONNMAXLIFETIME:-3m}
+      # Timezone inside the container affects report DateFormat.
+      TZ: ${TZ:-Asia/Shanghai}
+    healthcheck:
+      # There is no long-running process, so the healthcheck is a
+      # dry-run config validation (`--help` exits 0).
+      test: ["CMD", "/app/report"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - report-net
+
+volumes:
+  report-output:
+    name: report-output
+
+networks:
+  report-net:
+    name: report-net
+    driver: bridge

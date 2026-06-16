@@ -1,24 +1,24 @@
-# 使用官方的 Go 基础镜像
-FROM golang:1.24 as builder
+# Use official Go base image
+FROM golang:1.26 as builder
 
-# 启用go module
+# Enable Go modules
 ENV GO111MODULE=on \
     GOPROXY=https://goproxy.io,direct
 
-# 设置工作目录
+# Set working directory
 WORKDIR /app
 
-# 将源代码复制到容器中
+# Copy source code to container
 COPY . .
 
-# 构建应用程序
+# Build application
 RUN cd ./cmd/report && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app
 
-# 使用 scratch 作为基础镜像
+# Use scratch as base image for minimal size
 FROM scratch
 
-# 从构建器中复制构建的应用程序
+# Copy built application from builder
 COPY --from=builder /app/cmd/report/app /app
 
-# 设置运行时命令
+# Set entry point
 ENTRYPOINT ["/app"]

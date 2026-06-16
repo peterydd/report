@@ -1,0 +1,59 @@
+# End-to-end test stack.
+# 端到端测试依赖栈：MySQL 8.0 数据源 + MailHog SMTP 捕获服务器。
+#
+# 用法 / Usage:
+#   make e2e-up
+#   make e2e-test
+#   make e2e-down
+#
+# 端口约定 / Port conventions (host side):
+#   13306  MySQL 8.0 (replaces default 3306 to avoid collisions)
+#   1025   MailHog SMTP  (replaces default 25/1025 per image)
+#   8025   MailHog HTTP API (used by tests to assert delivered mail)
+#
+# 凭据 / Credentials (test-only, never reuse in prod):
+#   MYSQL_USER     = report
+#   MYSQL_PASSWORD = report
+#   MYSQL_DATABASE = reportdb
+#   MYSQL_ROOT_PASSWORD = rootpass
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: report-e2e-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: reportdb
+      MYSQL_USER: report
+      MYSQL_PASSWORD: report
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "13306:3306"
+    volumes:
+      - ../e2e/fixtures/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ureport", "-preport"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: report-e2e-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8025/api/v2/messages"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+networks:
+  default:
+    name: report-e2e-net

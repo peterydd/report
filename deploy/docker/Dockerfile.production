@@ -1,0 +1,63 @@
+# =====================================================================
+# Production multi-stage build for the report CLI.
+# 生产环境多阶段构建：scratch 基础镜像 + 非 root 运行 + 健康检查。
+#
+# Usage / 用法:
+#   docker build -f deploy/docker/Dockerfile.production -t report:1.1.0 .
+#   docker run --rm \
+#     -v $PWD/configs:/app/configs:ro \
+#     -v /var/reports:/var/reports \
+#     -e REPORT_SMTP_PASSWORD='***' \
+#     report:1.1.0
+# =====================================================================
+
+# ---- Build stage / 构建阶段 ---------------------------------------
+FROM golang:1.26.4-alpine AS builder
+
+# Caching-friendly layer order: deps first, then source.
+# 依赖层先于源码层，便于 Docker 缓存复用。
+WORKDIR /src
+
+# Copy module manifests first to maximise layer cache hit rate.
+# 先复制模块清单，最大化层缓存命中。
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the source and build a fully static binary.
+# 复制其余源码并构建完全静态二进制。
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w" \
+    -o /out/report ./cmd/report
+
+# ---- Runtime stage / 运行阶段 -------------------------------------
+# scratch has no shell, no libc, no busybox; the binary must be fully
+# static. The image ends up around 20 MB.
+# scratch 没有 shell/libc/busybox；二进制必须完全静态。镜像约 20 MB。
+FROM scratch AS runtime
+
+# OCI image labels / OCI 镜像元数据
+LABEL org.opencontainers.image.title="report" \
+      org.opencontainers.image.description="High-performance data report generator with email delivery" \
+      org.opencontainers.image.source="https://github.com/peterydd/report" \
+      org.opencontainers.image.licenses="MIT"
+
+# Copy the statically built binary.
+COPY --from=builder /out/report /app/report
+
+# /tmp is required for some SMTP / excelize temp files at runtime.
+COPY --from=builder /tmp /tmp
+VOLUME ["/tmp", "/var/reports", "/app/configs"]
+
+# The config file is mounted at /app/configs/config.yaml.
+# The default config search list includes "/" so /app/configs works.
+WORKDIR /app
+
+# SMTP defaults to port 25 / 587 / 465.
+EXPOSE 25 587 465
+
+# Run as a non-root numeric UID. scratch has no /etc/passwd so we set
+# the user by UID only. Pairs with runAsNonRoot: true in k8s manifests.
+USER 65532:65532
+
+ENTRYPOINT ["/app/report"]

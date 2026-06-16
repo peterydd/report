@@ -1,0 +1,57 @@
+# =====================================================================
+# Non-secret config in ConfigMap. Mounted as config.yaml inside the pod.
+# 非敏感配置放 ConfigMap，挂载为 /app/configs/config.yaml。
+#
+# To customise for your environment, copy this file and edit the
+# placeholders, or override via kustomize patches.
+# =====================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: report-config
+  namespace: report
+  labels:
+    app.kubernetes.io/name: report
+    app.kubernetes.io/component: config
+data:
+  config.yaml: |
+    database:
+      driver: "mysql"
+      source: "report:REPLACE_VIA_SECRET@tcp(mysql.report.svc.cluster.local:3306)/reportdb?parseTime=true&charset=utf8mb4"
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: "3m"
+    smtp:
+      host: "smtp.example.com"
+      port: "587"
+      username: "reports@example.com"
+      # Password is supplied via the REPORT_SMTP_PASSWORD env var,
+      # not through this file. Leave empty here.
+      password: ""
+      insecureSkipVerify: false
+      timeout: "30s"
+    reports:
+      - name: "daily-orders"
+        workBook:
+          prefix: "orders_"
+          dateFormat: "20060102"
+          suffix: ".xlsx"
+        sheets:
+          - name: "Orders"
+            sql: "SELECT id, customer, amount FROM orders WHERE DATE(created_at) = CURDATE()"
+            column: "ID,Customer,Amount"
+            isSum: true
+            sumBeginColumn: 3
+            enableStream: false
+            batchSize: 10000
+        message:
+          from: "reports@example.com"
+          to: ["ops@example.com"]
+          cc: []
+          bcc: []
+          subject: "Daily Orders Report"
+          body: "<p>See attached Excel report.</p>"
+          contentType: "text/html"
+          attachment:
+            contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            withFile: false

@@ -1,12 +1,19 @@
 package db
 
 import (
+	"os"
 	"testing"
+	"time"
 )
 
 func execute(factory DBFactory, dataSourceName string) error {
 	db := factory.Create()
-	if err := db.Connect(dataSourceName); err != nil {
+	poolConfig := &ConnPoolConfig{
+		MaxOpenConns:    10,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 3 * time.Minute,
+	}
+	if err := db.Connect(dataSourceName, poolConfig); err != nil {
 		return err
 	}
 	defer db.Close()
@@ -30,10 +37,13 @@ func execute(factory DBFactory, dataSourceName string) error {
 	return nil
 }
 
+// TestDB is an integration test that requires a real ClickHouse instance.
+// Run with: REPORT_INTEGRATION=1 go test -run TestDB ./pkg/db
 func TestDB(t *testing.T) {
-	var (
-		factory DBFactory
-	)
+	if os.Getenv("REPORT_INTEGRATION") == "" {
+		t.Skip("skipping integration test: set REPORT_INTEGRATION=1 to run against a real database")
+	}
+	var factory DBFactory
 
 	//factory = MysqlDBFactory{}
 	//if err := execute(factory, "test:password@tcp(localhost:3306)/test"); err != nil {
@@ -52,7 +62,7 @@ func TestDB(t *testing.T) {
 
 	factory = ClickHouseDBFactory{}
 	if err := execute(factory, "clickhouse://test:password@127.0.0.1:9000/test?dial_timeout=200ms&max_execution_time=60"); err != nil {
-		t.Fatal("error with factory method pattern", err)
+		t.Fatal("error with factory method pattern:", err)
 	}
 }
 

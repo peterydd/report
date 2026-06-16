@@ -1,32 +1,78 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# Go build artifacts
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+*.prof
+*.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Binaries
+report
+report-*
+!cmd/report/
+
+# Test and coverage
+coverage.html
+coverage.out
+test-report.xml
+
+# Dependency directories
+vendor/
 
 # Go workspace file
 go.work
+go.work.sum
 
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# OS
+Thumbs.db
+
+# Project specific
 output/
 data/
-report
+*.xlsx
+!pkg/excel/test.xlsx
+!pkg/mail/test.xlsx
+config.yaml
+configs/config.yaml
+/configs/config-local.yaml
 
+# Environment files
+.env
+.env.local
+.env.*.local
+# Per-deploy env file (e.g. deploy/docker/.env with real SMTP credentials)
+deploy/docker/.env
+deploy/k8s/overlays/**/.env
 
-/configs/config-sample.yaml
-/config.yaml
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Build directories
+dist/
+build/
+release/
+
+# Debug
+debug
+__debug_bin
+
+# Local development
+docker-compose.override.yml
+configs/config-local.yaml

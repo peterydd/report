@@ -1,0 +1,23 @@
+# =====================================================================
+# Kustomize entry point.
+# 用 kustomize 一键应用整套清单：
+#   kubectl apply -k deploy/k8s
+# =====================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: report
+
+resources:
+  - 00-namespace.yaml
+  - 10-serviceaccount.yaml
+  - 20-configmap.yaml
+  - 30-secret.yaml
+  - 40-pvc.yaml
+  - 50-cronjob.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: report
+      app.kubernetes.io/managed-by: kustomize

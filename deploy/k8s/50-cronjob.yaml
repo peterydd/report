@@ -1,0 +1,126 @@
+# =====================================================================
+# Scheduled run of the report CLI. Default schedule is 08:00 every day.
+# 定时执行 report CLI，默认每天 08:00 触发。
+#
+# The pod is short-lived: it boots, generates the workbook, sends the
+# email, and exits 0. failedJobsHistoryLimit keeps the last 3 pods for
+# debugging; successfulJobsHistoryLimit is 1 to avoid clutter.
+# Pod 短暂运行：启动 → 生成报表 → 发邮件 → 退出 0。失败历史保留 3 条
+# 用于排查，成功历史仅留 1 条避免堆压。
+# =====================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report
+  namespace: report
+  labels:
+    app.kubernetes.io/name: report
+    app.kubernetes.io/component: schedule
+spec:
+  schedule: "0 8 * * *"
+  timeZone: "Asia/Shanghai"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: report
+            app.kubernetes.io/component: runner
+          annotations:
+            # Promote pod to the front of the GC queue when it succeeds.
+            # 成功完成时优先回收。
+            cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        spec:
+          serviceAccountName: report
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: report
+              image: report:1.1.0
+              imagePullPolicy: IfNotPresent
+              args: []
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                privileged: false
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "1"
+                  memory: "512Mi"
+              env:
+                # Secret-backed SMTP password.
+                - name: REPORT_SMTP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: report-smtp
+                      key: REPORT_SMTP_PASSWORD
+                # Non-secret envs can stay as literals; the report CLI
+                # already supports them via REPORT_* overrides.
+                - name: TZ
+                  value: "Asia/Shanghai"
+                - name: REPORT_SMTP_INSECURESKIPVERIFY
+                  value: "false"
+                - name: REPORT_SMTP_TIMEOUT
+                  value: "30s"
+              envFrom:
+                # If a per-report ConfigMap with extra envs exists, it
+                # can be mounted via envFrom. Currently empty / reserved.
+                - configMapRef:
+                    name: report-config-env
+                    optional: true
+              volumeMounts:
+                - name: config
+                  mountPath: /app/configs
+                  readOnly: true
+                - name: output
+                  mountPath: /var/reports
+                - name: tmp
+                  mountPath: /tmp
+                - name: home
+                  mountPath: /home/nonroot
+              livenessProbe:
+                # The CLI exits 0 in <30s; this probe only matters if
+                # the process hangs (e.g. database timeout).
+                # 进程正常 <30s 结束；探针仅在卡死时生效。
+                exec:
+                  command: ["/app/report", "--version"]
+                initialDelaySeconds: 5
+                periodSeconds: 30
+                timeoutSeconds: 5
+                failureThreshold: 1
+          volumes:
+            - name: config
+              configMap:
+                name: report-config
+                items:
+                  - key: config.yaml
+                    path: config.yaml
+            - name: output
+              persistentVolumeClaim:
+                claimName: report-output
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+            - name: home
+              emptyDir:
+                sizeLimit: 16Mi
