@@ -71,6 +71,12 @@ jobs:
     - name: Run go vet
       run: go vet ./...
 
+    - name: Validate UTF-8 encoding
+      # 拦截 PowerShell 5.1 + cp936 写文件乱码（v1.1.0 事故复盘）
+      # Detects corrupted text files (e.g. mojibake from non-UTF-8 PowerShell
+      # write). See scripts/utf8check/README.md.
+      run: go run ./scripts/utf8check
+
     - name: Check formatting
       run: |
         if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then

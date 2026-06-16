@@ -129,7 +129,7 @@ benchmark:
 
 .PHONY: lint
 # 运行代码检查
-lint: fmt vet
+lint: fmt vet check-encoding
 	@echo "$(GREEN)Linting code...$(NC)"
 	@if command -v $(GOLINT) > /dev/null; then \
 		$(GOLINT) run ./...; \
@@ -148,6 +148,12 @@ fmt:
 vet:
 	@echo "$(GREEN)Running go vet...$(NC)"
 	$(GOVET) ./...
+
+.PHONY: check-encoding
+# 校验仓库内文本文件 UTF-8 编码（拦截 PowerShell 写文件乱码）
+check-encoding:
+	@echo "$(GREEN)Validating UTF-8 encoding...$(NC)"
+	$(GORUN) ./scripts/utf8check
 
 .PHONY: tidy
 # 整理依赖
